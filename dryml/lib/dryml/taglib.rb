@@ -13,14 +13,20 @@
               taglib.reload
             else
               taglib = Taglib.new(src_file)
-              @cache[src_file] = taglib
+              if Rails.application.config.hobo.fast_dev_mode
+                if Rails.application.config.hobo.cached_tags.any?{|t| src_file.include?(t)}
+                  @cache[src_file] = taglib
+                end
+              else
+                @cache[src_file] = taglib
+              end
             end
             taglib
           end
         end
 
         def clear_cache
-          @cache = {}
+          @cache = {} unless Rails.application.config.hobo.fast_dev_mode
         end
 
         private

@@ -66,14 +66,14 @@ module Hobo
       end
       app.routes_reloader.paths << h.routes_path
       app.config.to_prepare do
-        Rails::Generators.invoke('hobo:routes', %w[-f -q])
+        Rails::Generators.invoke('hobo:routes', %w[-f -q]) unless app.config.hobo.fast_dev_mode
       end
     end
 
     initializer 'hobo.dryml' do |app|
       unless app.config.hobo.read_only_file_system
         app.config.to_prepare do
-          Dryml::DrymlGenerator.run
+          Dryml::DrymlGenerator.run unless app.config.hobo.fast_dev_mode
         end
       end
     end
