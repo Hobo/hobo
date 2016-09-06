@@ -47,6 +47,12 @@ module Hobo
       return if migrations_pending?
 
       generator = Generators::Hobo::Migration::Migrator.new(lambda{|c,d,k,p| extract_renames!(c,d,k,p)})
+
+      unless generator.connection.supports_foreign_keys?
+        action = choose("\n#{generator.connection.adapter_name} adapter does not support foreign keys. You probably should generate the migration using a database adapter which has foreign key support.\n\nGenerate migration [w]ithout foreign keys, or [c]ancel?", /^(w|c)$/)
+        return if action == 'c'
+      end
+
       up, down = generator.generate
 
       if up.blank?

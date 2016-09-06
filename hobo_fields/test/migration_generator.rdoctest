@@ -223,8 +223,9 @@ Cleanup
 ### Foreign Keys
 
 HoboFields extends the `belongs_to` macro so that it also declares the
-foreign-key field.  It also generates an index on the field.
+foreign-key field.  It also generates an index and foreign key constraint on the field.
 
+        >> class Category < ActiveRecord::Base; end
         >>
          class Advert
            belongs_to :category
@@ -234,10 +235,14 @@ foreign-key field.  It also generates an index on the field.
         =>
          "add_column :adverts, :category_id, :integer
 
-         add_index :adverts, [:category_id]"
+         add_index :adverts, [:category_id]
+
+         add_foreign_key :adverts, :categories"
         >> down
         =>
-         "remove_column :adverts, :category_id
+         "remove_foreign_key :adverts, :categories
+         
+         remove_column :adverts, :category_id
 
          remove_index :adverts, :name => :index_adverts_on_category_id rescue ActiveRecord::StatementInvalid"
 
@@ -246,6 +251,7 @@ Cleanup:
 
         >> Advert.field_specs.delete(:category_id)
         >> Advert.index_specs.delete_if {|spec| spec.fields==["category_id"]}
+        >> Advert.fk_constraint_specs.delete_if {|spec| spec.column=="category_id"}
 {.hidden}
 
 If you specify a custom foreign key, the migration generator observes that:
@@ -259,13 +265,16 @@ If you specify a custom foreign key, the migration generator observes that:
         =>
          "add_column :adverts, :c_id, :integer
 
-         add_index :adverts, [:c_id]"
+         add_index :adverts, [:c_id]
+         
+         add_foreign_key :adverts, :categories, :column => :c_id"
 
 Cleanup:
 {.hidden}
 
         >> Advert.field_specs.delete(:c_id)
         >> Advert.index_specs.delete_if {|spec| spec.fields==["c_id"]}
+        >> Advert.fk_constraint_specs.delete_if {|spec| spec.column=="c_id"}
 {.hidden}
 
 You can avoid generating the index by specifying `:index => false`
@@ -276,13 +285,17 @@ You can avoid generating the index by specifying `:index => false`
          end
         >> up, down = Generators::Hobo::Migration::Migrator.run
         >> up
-        => "add_column :adverts, :category_id, :integer"
+        =>
+         "add_column :adverts, :category_id, :integer
+
+         add_foreign_key :adverts, :categories"
 
 Cleanup:
 {.hidden}
 
         >> Advert.field_specs.delete(:category_id)
         >> Advert.index_specs.delete_if {|spec| spec.fields==["category_id"]}
+        >> Advert.fk_constraint_specs.delete_if {|spec| spec.column=="category_id"}
 {.hidden}
 
 You can specify the index name with :index
@@ -296,13 +309,81 @@ You can specify the index name with :index
         =>
          "add_column :adverts, :category_id, :integer
 
-         add_index :adverts, [:category_id], :name => 'my_index'"
+         add_index :adverts, [:category_id], :name => \"my_index\"
+
+         add_foreign_key :adverts, :categories"
 
 Cleanup:
 {.hidden}
 
         >> Advert.field_specs.delete(:category_id)
         >> Advert.index_specs.delete_if {|spec| spec.fields==["category_id"]}
+        >> Advert.fk_constraint_specs.delete_if {|spec| spec.column=="category_id"}
+{.hidden}
+
+Similarly, you can avoid or rename the constraint with :foreign_key_constraint
+
+        >>
+         class Advert
+           belongs_to :category, :foreign_key_constraint => false
+         end
+        >> up, down = Generators::Hobo::Migration::Migrator.run
+        >> up
+        =>
+         "add_column :adverts, :category_id, :integer
+
+         add_index :adverts, [:category_id]"
+
+Cleanup:
+{.hidden}
+
+        >> Advert.field_specs.delete(:category_id)
+        >> Advert.index_specs.delete_if {|spec| spec.fields==["category_id"]}
+        >> Advert.fk_constraint_specs.delete_if {|spec| spec.column=="category_id"}
+{.hidden}
+
+        >>
+         class Advert
+           belongs_to :category, :foreign_key_constraint => 'my_constraint'
+         end
+        >> up, down = Generators::Hobo::Migration::Migrator.run
+        >> up
+        =>
+         "add_column :adverts, :category_id, :integer
+
+         add_index :adverts, [:category_id]
+
+         add_foreign_key :adverts, :categories, :name => \"my_constraint\""
+
+Cleanup:
+{.hidden}
+
+        >> Advert.field_specs.delete(:category_id)
+        >> Advert.index_specs.delete_if {|spec| spec.fields==["category_id"]}
+        >> Advert.fk_constraint_specs.delete_if {|spec| spec.column=="category_id"}
+{.hidden}
+
+You can also specify any add_foreign_key options by passing a hash in :foreign_key_constraint
+
+        >>
+         class Advert
+           belongs_to :category, :foreign_key_constraint => { :on_delete => :cascade }
+         end
+        >> up, down = Generators::Hobo::Migration::Migrator.run
+        >> up
+        =>
+         "add_column :adverts, :category_id, :integer
+
+         add_index :adverts, [:category_id]
+
+         add_foreign_key :adverts, :categories, :on_delete => :cascade
+
+Cleanup:
+{.hidden}
+
+        >> Advert.field_specs.delete(:category_id)
+        >> Advert.index_specs.delete_if {|spec| spec.fields==["category_id"]}
+        >> Advert.fk_constraint_specs.delete_if {|spec| spec.column=="category_id"}
 {.hidden}
 
 ### Timestamps
@@ -381,7 +462,7 @@ You can specify the name for the index
          end
         >> up, down = Generators::Hobo::Migration::Migrator.run
         >> up.split("\n")[2]
-        => "add_index :adverts, [:title], :name => 'my_index'"
+        => "add_index :adverts, [:title], :name => \"my_index\""
 
 Cleanup:
 {.hidden}
@@ -413,7 +494,7 @@ The available options for the index function are `:unique` and `:name`
          end
         >> up, down = Generators::Hobo::Migration::Migrator.run
         >> up.split("\n")[2]
-        => "add_index :adverts, [:title], :unique => true, :name => 'my_index'"
+        => "add_index :adverts, [:title], :unique => true, :name => \"my_index\""
 
 Cleanup:
 {.hidden}
@@ -438,6 +519,20 @@ Cleanup:
 {.hidden}
 
 Finally, you can specify that the migration generator should completely ignore an index by passing its name to ignore_index in the model. This is helpful for preserving indices that can't be automatically generated, such as prefix indices in MySQL.
+
+### Foreign key constraints
+
+Although you should rarely need to do so, you can create foreign key constraints directly to a target model, independently of any `belongs_to` association
+
+        >>
+         class Advert
+          foreign_key_constraint :categories
+         end
+        >> up, down = Generators::Hobo::Migration::Migrator.run
+        >> up.split("\n")[2]
+        => "add_foreign_key :adverts, :categories"
+
+Call ignore_foreign_key_constraint on the model to tell the migration generator to ignore an existing constraint.
 
 ### Rename a table
 

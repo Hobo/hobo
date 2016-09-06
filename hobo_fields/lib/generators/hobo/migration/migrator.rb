@@ -2,7 +2,7 @@ module Generators
   module Hobo
     module Migration
 
-      class HabtmModelShim < Struct.new(:join_table, :foreign_keys, :connection)
+      class HabtmModelShim < Struct.new(:join_table, :foreign_keys, :fk_constraint_specs, :connection)
 
         def self.from_reflection(refl)
           result = self.new
@@ -11,6 +11,22 @@ module Generators
           # this may fail in weird ways if HABTM is running across two DB connections (assuming that's even supported)
           # figure that anybody who sets THAT up can deal with their own migrations...
           result.connection = refl.active_record.connection
+
+          result.fk_constraint_specs = [
+            HoboFields::Model::ForeignKeyConstraintSpec.new(
+              result,
+              refl.active_record.table_name,
+              from_table: result.join_table,
+              column: refl.foreign_key
+            ),
+            HoboFields::Model::ForeignKeyConstraintSpec.new(
+              result,
+              refl.table_name,
+              from_table: result.join_table,
+              column: refl.association_foreign_key
+            )
+          ]
+
           result
         end
 
@@ -39,7 +55,6 @@ module Generators
         def index_specs
           []
         end
-
       end
 
       class Migrator
@@ -50,7 +65,7 @@ module Generators
         @ignore_tables = []
 
         class << self
-          attr_accessor :ignore_models, :ignore_tables, :disable_indexing
+          attr_accessor :ignore_models, :ignore_tables, :disable_indexing, :disable_fk_constraints
         end
 
         def self.run(renames={})
@@ -98,6 +113,7 @@ module Generators
           case connection.class.name
           when /mysql/i
             types[:integer][:limit] ||= 11
+            types[:text][:limit] ||= 65535
           end
           types
         end
@@ -219,14 +235,14 @@ module Generators
           to_rename = extract_table_renames!(to_create, to_drop)
 
           renames = to_rename.map do |old_name, new_name|
-            "rename_table :#{old_name}, :#{new_name}"
+            "rename_table #{old_name.to_sym.inspect}, #{new_name.to_sym.inspect}"
           end * "\n"
           undo_renames = to_rename.map do |old_name, new_name|
-            "rename_table :#{new_name}, :#{old_name}"
+            "rename_table #{new_name.to_sym.inspect}, #{old_name.to_sym.inspect}"
           end * "\n"
 
           drops = to_drop.map do |t|
-            "drop_table :#{t}"
+            "drop_table #{t.to_sym.inspect}"
           end * "\n"
           undo_drops = to_drop.map do |t|
             revert_table(t)
@@ -236,27 +252,36 @@ module Generators
             create_table(models_by_table_name[t])
           end * "\n\n"
           undo_creates = to_create.map do |t|
-            "drop_table :#{t}"
+            "drop_table #{t.to_sym.inspect}"
           end * "\n"
 
           changes = []
           undo_changes = []
           index_changes = []
+          fk_constraint_changes = []
           undo_index_changes = []
+          undo_fk_constraint_changes = []
           to_change.each do |t|
             model = models_by_table_name[t]
             table = to_rename.key(t) || model.table_name
             if table.in?(db_tables)
-              change, undo, index_change, undo_index = change_table(model, table)
+              change, undo = change_table(model, table)
               changes << change
               undo_changes << undo
-              index_changes << index_change
-              undo_index_changes << undo_index
+
+              index_change, undo_index = change_indexes(model, table)
+              index_changes << index_change.join("\n")
+              undo_index_changes << undo_index.join("\n")
+
+              fk_constraint_change, undo_fk_constraint = change_fk_constraints(model, table)
+              fk_constraint_changes << fk_constraint_change.join("\n")
+              undo_fk_constraint_changes << undo_fk_constraint.join("\n")
             end
           end
 
-          up   = [renames, drops, creates, changes, index_changes].flatten.reject(&:blank?) * "\n\n"
-          down = [undo_changes, undo_renames, undo_drops, undo_creates, undo_index_changes].flatten.reject(&:blank?) * "\n\n"
+          # TODO Should do all FK drops before everything else
+          up   = [renames, drops, creates, changes, index_changes, fk_constraint_changes].flatten.reject(&:blank?) * "\n\n"
+          down = [undo_fk_constraint_changes, undo_changes, undo_renames, undo_drops, undo_creates, undo_index_changes].flatten.reject(&:blank?) * "\n\n"
 
           [up, down]
         end
@@ -265,18 +290,26 @@ module Generators
           longest_field_name = model.field_specs.values.map { |f| f.sql_type.to_s.length }.max
           if model.primary_key != "id"
             if model.primary_key
-              primary_key_option = ", :primary_key => :#{model.primary_key}"
+              primary_key_option = ", :primary_key => #{model.primary_key.to_sym.inspect}"
             else
               primary_key_option = ", :id => false"
             end
           end
-          (["create_table :#{model.table_name}#{primary_key_option} do |t|"] +
-           model.field_specs.values.sort_by{|f| f.position}.map {|f| create_field(f, longest_field_name)} +
-           ["end"] + (Migrator.disable_indexing ? [] : create_indexes(model))) * "\n"
+          [
+            ["create_table #{model.table_name.to_sym.inspect}#{primary_key_option} do |t|"],
+            model.field_specs.values.sort_by{|f| f.position}.map {|f| create_field(f, longest_field_name)},
+            ["end"],
+            (Migrator.disable_indexing ? [] : create_indexes(model)),
+            (Migrator.disable_fk_constraints ? [] : create_fk_constraints(model))
+           ].flatten(1) * "\n"
         end
 
         def create_indexes(model)
           model.index_specs.map { |i| i.to_add_statement(model.table_name) }
+        end
+
+        def create_fk_constraints(model)
+          model.fk_constraint_specs.map { |fkc| fkc.to_add_statement(model.table_name) }
         end
 
         def create_field(field_spec, field_name_width)
@@ -306,24 +339,24 @@ module Generators
           to_change = db_column_names & model_column_names
 
           renames = to_rename.map do |old_name, new_name|
-            "rename_column :#{new_table_name}, :#{old_name}, :#{new_name}"
+            "rename_column #{new_table_name.to_sym.inspect}, #{old_name.to_sym.inspect}, #{new_name.to_sym.inspect}"
           end
           undo_renames = to_rename.map do |old_name, new_name|
-            "rename_column :#{new_table_name}, :#{new_name}, :#{old_name}"
+            "rename_column #{new_table_name.to_sym.inspect}, #{new_name.to_sym.inspect}, #{old_name.to_sym.inspect}"
           end
 
           to_add = to_add.sort_by {|c| model.field_specs[c].position }
           adds = to_add.map do |c|
             spec = model.field_specs[c]
-            args = [":#{spec.sql_type}"] + format_options(spec.options, spec.sql_type)
-            "add_column :#{new_table_name}, :#{c}, #{args * ', '}"
+            args = [spec.sql_type.to_sym.inspect] + format_options(spec.options, spec.sql_type)
+            "add_column #{new_table_name.to_sym.inspect}, #{c.to_sym.inspect}, #{args * ', '}"
           end
           undo_adds = to_add.map do |c|
-            "remove_column :#{new_table_name}, :#{c}"
+            "remove_column #{new_table_name.to_sym.inspect}, #{c.to_sym.inspect}"
           end
 
           removes = to_remove.map do |c|
-            "remove_column :#{new_table_name}, :#{c}"
+            "remove_column #{new_table_name.to_sym.inspect}, #{c.to_sym.inspect}"
           end
           undo_removes = to_remove.map do |c|
             revert_column(current_table_name, c)
@@ -345,8 +378,8 @@ module Generators
               change_spec[:default]   = spec.default   unless spec.default.nil? && col.default.nil?
               change_spec[:comment]   = spec.comment   unless spec.comment.nil? && col.try.comment.nil?
 
-              changes << "change_column :#{new_table_name}, :#{c}, " +
-                ([":#{spec.sql_type}"] + format_options(change_spec, spec.sql_type, true)).join(", ")
+              changes << "change_column #{new_table_name.to_sym.inspect}, #{c.to_sym.inspect}, " +
+                ([spec.sql_type.to_sym.inspect] + format_options(change_spec, spec.sql_type, true)).join(", ")
               back = change_column_back(current_table_name, col_name)
               undo_changes << back unless back.blank?
             else
@@ -354,12 +387,8 @@ module Generators
             end
           end.compact
 
-          index_changes, undo_index_changes = change_indexes(model, current_table_name)
-
           [(renames + adds + removes + changes) * "\n",
-           (undo_renames + undo_adds + undo_removes + undo_changes) * "\n",
-           index_changes * "\n",
-           undo_index_changes * "\n"]
+           (undo_renames + undo_adds + undo_removes + undo_changes) * "\n"]
         end
 
         def change_indexes(model, old_table_name)
@@ -388,7 +417,32 @@ module Generators
           # for why the rescue exists
           max_length = connection.index_name_length
           name = name[0,max_length] if name.length > max_length
-          "remove_index :#{table}, :name => :#{name} rescue ActiveRecord::StatementInvalid"
+          "remove_index #{table.to_sym.inspect}, :name => #{name.to_sym.inspect} rescue ActiveRecord::StatementInvalid"
+        end
+
+        def change_fk_constraints(model, old_table_name)
+          return [[],[]] unless model.connection.supports_foreign_keys?
+          return [[],[]] if Migrator.disable_fk_constraints || model.is_a?(HabtmModelShim)
+          new_table_name = model.table_name
+          existing_fk_constraints = HoboFields::Model::ForeignKeyConstraintSpec.for_model(model, old_table_name)
+          model_fk_constraints = model.fk_constraint_specs
+          add_fk_constraints = model_fk_constraints - existing_fk_constraints
+          drop_fk_constraints = existing_fk_constraints - model_fk_constraints
+          undo_add_fk_constraints = []
+          undo_drop_fk_constraints = []
+          add_fk_constraints.map! do |fkc|
+            undo_add_fk_constraints << drop_fk_constraint(old_table_name, fkc.name)
+            fkc.to_add_statement(new_table_name)
+          end
+          drop_fk_constraints.map! do |fkc|
+            undo_drop_fk_constraints << fkc.to_add_statement(old_table_name)
+            drop_fk_constraint(new_table_name, fkc.name)
+          end
+          [drop_fk_constraints + add_fk_constraints, undo_add_fk_constraints + undo_drop_fk_constraints]
+        end
+
+        def drop_fk_constraint(table, name)
+          "remove_foreign_key #{table.to_sym.inspect}, :name => #{name.to_sym.inspect}"
         end
 
         def format_options(options, type, changing=false)
@@ -417,7 +471,7 @@ module Generators
           elsif (md = revert.match(/\s*t\.([a-z_]+)\s+"#{column}"(?:,\s+(.*?)$)?/m))
             # Sexy migration
             _, type, options = *md
-            type = ":#{type}"
+            type = type.to_sym.inspect
           end
           [type, options]
         end
@@ -425,13 +479,13 @@ module Generators
 
         def change_column_back(table, column)
           type, options = column_options_from_reverted_table(table, column)
-          "change_column :#{table}, :#{column}, #{type}#{', ' + options.strip if options}"
+          "change_column #{table.to_sym.inspect}, #{column.to_sym.inspect}, #{type}#{', ' + options.strip if options}"
         end
 
 
         def revert_column(table, column)
           type, options = column_options_from_reverted_table(table, column)
-          "add_column :#{table}, :#{column}, #{type}#{', ' + options.strip if options}"
+          "add_column #{table.to_sym.inspect}, #{column.to_sym.inspect}, #{type}#{', ' + options.strip if options}"
         end
 
       end

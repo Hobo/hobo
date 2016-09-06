@@ -7,7 +7,7 @@ module HoboFields
         @model = model
         self.table = options.delete(:table_name) || model.table_name
         self.fields = Array.wrap(fields).*.to_s
-        self.name = options.delete(:name) || model.connection.index_name(self.table, :column => self.fields)
+        self.name = options.delete(:name) || default_name
         self.unique = options.delete(:unique) || false
         if options[:where]
           self.where = "#{options.delete(:where)}"
@@ -25,24 +25,19 @@ module HoboFields
         end.compact
       end
 
-      def default_name?
-        name == @model.connection.index_name(table, :column => fields)
+      def default_name
+        @model.connection.index_name(table, :column => fields)
       end
 
       def to_add_statement(new_table_name)
-        r = "add_index :#{new_table_name}, #{fields.*.to_sym.inspect}"
+        r = "add_index #{new_table_name.to_sym.inspect}, #{fields.*.to_sym.inspect}"
         r += ", :unique => true" if unique
-        r += ", :where => '#{self.where}'" if self.where.present?
-        if default_name?
-          check_name = @model.connection.index_name(self.table, :column => self.fields)
-        else
-          check_name = name
-        end
-        if check_name.length > @model.connection.index_name_length
-          r += ", :name => '#{name[0,@model.connection.index_name_length]}'"
-          $stderr.puts("WARNING: index name #{check_name} too long, trimming")
-        else
-          r += ", :name => '#{name}'" unless default_name?
+        r += ", :where => #{self.where.inspect}" if self.where.present?
+        if name.length > @model.connection.index_name_length
+          r += ", :name => #{name[0,@model.connection.index_name_length].inspect}"
+          $stderr.puts("WARNING: index name #{name} too long, trimming")
+        elsif name != default_name
+          r += ", :name => #{name.inspect}"
         end
         r
       end
@@ -55,7 +50,6 @@ module HoboFields
         v.hash == hash
       end
       alias_method :eql?, :==
-
     end
 
   end

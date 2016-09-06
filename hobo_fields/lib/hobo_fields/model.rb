@@ -22,6 +22,11 @@ module HoboFields
     inheriting_cattr_reader :index_specs => []
     inheriting_cattr_reader :ignore_indexes => []
 
+    # fk_constraint_specs holds ForeignKeyConstraintSpec objects for all foreign key constraints
+    # declared by belongs_to
+    inheriting_cattr_reader :fk_constraint_specs => []
+    inheriting_cattr_reader :ignore_fk_constraints => []
+
     # eval avoids the ruby 1.9.2 "super from singleton method ..." error
     eval %(
       def self.inherited(klass)
@@ -38,10 +43,19 @@ module HoboFields
       index_specs << HoboFields::Model::IndexSpec.new(self, fields, options) unless index_specs.*.fields.include?(Array.wrap(fields).*.to_s)
     end
 
+    def self.foreign_key_constraint(target_table, options = {})
+      fk_constraint_specs << HoboFields::Model::ForeignKeyConstraintSpec.new(self, target_table, options)
+    end
+
     # tell the migration generator to ignore the named index. Useful for existing indexes, or for indexes
     # that can't be automatically generated (for example: an prefix index in MySQL)
     def self.ignore_index(index_name)
       ignore_indexes << index_name.to_s
+    end
+
+    # tell the migration generator to ignore the named foreign key constraint
+    def self.ignore_foreign_key_constraint(fk_constraint_name)
+      ignore_fk_constraints << fk_constraint_name.to_s
     end
 
     private
@@ -81,7 +95,8 @@ module HoboFields
     end
 
 
-    # Extend belongs_to so that it creates a FieldSpec for the foreign key
+    # Extend belongs_to so that it creates a FieldSpec for the foreign key, as well as
+    # an index and a foreign key constraint
     def self.belongs_to_with_field_declarations(name, *args, &block)
       if args.size == 0 || (args.size == 1 && args[0].kind_of?(Proc))
           options = {}
@@ -97,16 +112,33 @@ module HoboFields
 
       index_options = {}
       index_options[:name] = options.delete(:index) if options.has_key?(:index)
+
+      fk_constraint_options = {}
+      if options.has_key?(:foreign_key_constraint)
+        fk_constraint_options = options.delete(:foreign_key_constraint)
+        unless fk_constraint_options.is_a?(Hash)
+          fk_constraint_options = {:name => fk_constraint_options}
+        end
+      end
+
       bt = belongs_to_without_field_declarations(name, *args, &block)
       refl = reflections[name.to_s]
       fkey = refl.foreign_key
       declare_field(fkey.to_sym, :integer, column_options)
+
+      index_fields = fkey
       if refl.options[:polymorphic]
         declare_polymorphic_type_field(name, column_options)
-        index(["#{name}_type", fkey], index_options) if index_options[:name]!=false
-      else
-        index(fkey, index_options) if index_options[:name]!=false
+        index_fields = ["#{name}_type", fkey]
       end
+      index(index_fields, index_options) if index_options[:name]!=false
+
+      if fk_constraint_options[:name] != false and not refl.options[:polymorphic]
+        fk_constraint_options[:column] = fkey
+        fk_constraint_options[:primary_key] = refl.klass.primary_key
+        foreign_key_constraint(refl.klass.table_name, fk_constraint_options)
+      end
+
       bt
     end
     class << self
