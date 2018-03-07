@@ -47,7 +47,7 @@ class AjaxFormTest < ActionDispatch::IntegrationTest
 
     find("#form2").fill_in("story_status_name", :with => "foo2")
     find("#form2").click_button("new")
-    sleep 1
+    sleep 2
     assert find(".statuses table tbody tr:nth-child(2)").has_text?("foo2")
 
     find("#form3").fill_in("story_status_name", :with => "foo3")
