@@ -1,6 +1,6 @@
 ActionController::Base.class_eval do
 
-  before_filter do
+  before_action do
     append_view_path Dryml::Railtie::PageTagResolver.new(self)
   end
 

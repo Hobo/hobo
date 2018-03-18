@@ -3,6 +3,17 @@
 # which will override the routes in this file.
 
 <%= Rails.application.class.name %>.routes.draw do
+  begin
+  <%=
+    begin
+      ::GearsModel.emit_custom_routes
+    rescue => e
+      ''
+    end
+  %>
+    rescue ScriptError, StandardError => e
+      DT.p "Error in custom routes output, review hobo_routes.rb", e.message
+    end
 <% for subsite in subsites -%>
   <%- if subsite -%>
 

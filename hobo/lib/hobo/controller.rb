@@ -16,7 +16,7 @@ module Hobo
       def included_in_class(klass)
         klass.extend(ClassMethods)
         klass.class_eval do
-          before_filter :login_from_cookie
+          before_action :login_from_cookie
           alias_method_chain :redirect_to, :object_url
           private
           def set_mailer_default_url_options
@@ -25,7 +25,7 @@ module Hobo
               Rails.application.config.action_mailer.default_url_options[:port] = request.port unless request.port == 80
             end
           end
-          before_filter :set_mailer_default_url_options
+          before_action :set_mailer_default_url_options
           @included_taglibs = []
           rescue_from ActionController::RoutingError, :with => :not_found unless Rails.env.development?
         end

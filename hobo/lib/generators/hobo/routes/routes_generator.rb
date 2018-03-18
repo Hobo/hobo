@@ -6,6 +6,7 @@ module Hobo
 
     include Generators::HoboSupport::EvalTemplate
 
+
     def self.banner
       "rails generate hobo:routes #{self.arguments.map(&:usage).join(' ')} [options]"
     end

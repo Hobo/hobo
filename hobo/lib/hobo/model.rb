@@ -156,7 +156,9 @@ module Hobo
         end
         belongs_to_without_test_methods(name, *args, &block)
         refl = reflections[name.to_s]
-        id_method = refl.options[:primary_key] || refl.klass.primary_key
+        id_method = refl.options[:primary_key]
+        id_method = refl.klass.primary_key if id_method.blank?
+        id_method = :id if id_method.blank?
         if options[:polymorphic]
           # TODO: the class lookup in _is? below is incomplete; a polymorphic association to an STI base class
           #       will fail to match an object of a derived type
@@ -185,7 +187,6 @@ module Hobo
         end
       end
 
-
       def attr_accessor_with_creator_metadata(*args)
         options = args.extract_options!
         if options.delete(:creator)
@@ -199,23 +200,19 @@ module Hobo
         attr_accessor_without_creator_metadata(*args)
       end
 
-
       def has_one_with_new_method(name, options={}, &block)
         has_one_without_new_method(name, options, &block)
         class_eval "def new_#{name}(attributes={}); build_#{name}(attributes, false); end"
       end
 
-
       def set_default_order(order)
         @default_order = order
       end
-
 
       def never_show(*fields)
         @hobo_never_show ||= []
         @hobo_never_show.concat(fields.*.to_sym)
       end
-
 
       def set_search_columns(*columns)
         class_eval %{
@@ -225,14 +222,11 @@ module Hobo
         }
       end
 
-
       public
-
 
       def never_show?(field)
         (@hobo_never_show && field.to_sym.in?(@hobo_never_show)) || (superclass < Hobo::Model && superclass.never_show?(field))
       end
-
 
       def find(*args)
         result = super
@@ -240,23 +234,19 @@ module Hobo
         result
       end
 
-
       def find_by_sql(*args)
         result = super
         result
       end
 
-
       def creator_type
         attr_type(creator_attribute)
       end
-
 
       def search_columns
         column_names = columns.*.name
         SEARCH_COLUMNS_GUESS.select{|c| c.in?(column_names) }
       end
-
 
       def reverse_reflection(association_name)
         refl = reflections[association_name.to_s] or raise "No reverse reflection for #{name}.#{association_name}"
@@ -377,7 +367,6 @@ module Hobo
       set_creator!(user) unless get_creator
     end
 
-
     def set_creator!(user)
       attr = self.class.creator_attribute
       return unless attr
@@ -397,16 +386,13 @@ module Hobo
       end
     end
 
-
     def get_creator
       self.class.creator_attribute && send(self.class.creator_attribute)
     end
 
-
     def typed_id
       "#{self.class.name.underscore}:#{self.id}" if id
     end
-
 
     def to_s
       if self.class.name_attribute
