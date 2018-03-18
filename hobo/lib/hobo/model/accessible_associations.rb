@@ -185,7 +185,7 @@ module Hobo
 
 
       # Add :accessible to the valid options so AR doesn't complain
-      ::ActiveRecord::Associations::Builder::Association.valid_options << :accessible
+      ::ActiveRecord::Associations::Builder::Association::VALID_OPTIONS << :accessible
 
     end
   end

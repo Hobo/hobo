@@ -219,7 +219,7 @@ module HoboFields
           end
         end or
 
-        (col = column(name.to_s) and HoboFields::PLAIN_TYPES[col.type] || col.klass)
+        (col = column(name.to_s) and HoboFields::PLAIN_TYPES[col.type] || String)
     end
 
 

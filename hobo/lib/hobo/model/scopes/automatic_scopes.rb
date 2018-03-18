@@ -5,6 +5,7 @@ module Hobo
       module AutomaticScopes
 
         def create_automatic_scope(name, check_only=false)
+          # check_only = true
           ScopeBuilder.new(self, name).create_scope(check_only)
         rescue ActiveRecord::StatementInvalid => e
           # Problem with the database? Don't try to create automatic
@@ -32,6 +33,8 @@ module Hobo
           matched_scope = true
 
           like_operator = ActiveRecord::Base.connection.adapter_name =~ /postg/i ? 'ILIKE' : 'LIKE'
+          klass = @klass
+
 
           case
           # --- Association Queries --- #
@@ -42,11 +45,11 @@ module Hobo
 
             def_scope do |*records|
               if records.empty?
-                @klass.where exists_sql_condition(refl, true)
+                klass.where exists_sql_condition(refl, true)
               else
                 records = records.flatten.compact.map {|r| find_if_named(refl, r) }
                 exists_sql = ([exists_sql_condition(refl)] * records.length).join(" AND ")
-                @klass.where *([exists_sql] + records)
+                klass.where *([exists_sql] + records)
               end
             end
 
@@ -57,7 +60,7 @@ module Hobo
             exists_sql = exists_sql_condition(refl)
             def_scope do |record|
               record = find_if_named(refl, record)
-              @klass.where exists_sql, record
+              klass.where exists_sql, record
             end
 
           # any_of_players(player1, player2)
@@ -66,11 +69,11 @@ module Hobo
 
             def_scope do |*records|
               if records.empty?
-                @klass.where exists_sql_condition(refl, true)
+                klass.where exists_sql_condition(refl, true)
               else
                 records = records.flatten.compact.map {|r| find_if_named(refl, r) }
                 exists_sql = ([exists_sql_condition(refl)] * records.length).join(" OR ")
-                @klass.where *([exists_sql] + records)
+                klass.where *([exists_sql] + records)
               end
             end
 
@@ -80,11 +83,11 @@ module Hobo
 
             def_scope do |*records|
               if records.empty?
-                @klass.where "NOT (#{exists_sql_condition(refl, true)})"
+                klass.where "NOT (#{exists_sql_condition(refl, true)})"
               else
                 records = records.flatten.compact.map {|r| find_if_named(refl, r) }
                 exists_sql = ([exists_sql_condition(refl)] * records.length).join(" AND ")
-                @klass.where *(["NOT (#{exists_sql})"] + records)
+                klass.where *(["NOT (#{exists_sql})"] + records)
               end
             end
 
@@ -95,7 +98,7 @@ module Hobo
             exists_sql = exists_sql_condition(refl)
             def_scope do |record|
               record = find_if_named(refl, record)
-              @klass.where "NOT #{exists_sql}", record
+              klass.where "NOT #{exists_sql}", record
             end
 
           # team_is(a_team)
@@ -105,12 +108,12 @@ module Hobo
             if refl.options[:polymorphic]
               def_scope do |record|
                 record = find_if_named(refl, record)
-                @klass.where "#{foreign_key_column refl} = ? AND #{$1}_type = ?", record, record.class.name
+                klass.where "#{foreign_key_column refl} = ? AND #{$1}_type = ?", record, record.class.name
               end
             else
               def_scope do |record|
                 record = find_if_named(refl, record)
-                @klass.where "#{foreign_key_column refl} = ?", record
+                klass.where "#{foreign_key_column refl} = ?", record
               end
             end
 
@@ -121,12 +124,12 @@ module Hobo
             if refl.options[:polymorphic]
               def_scope do |record|
                 record = find_if_named(refl, record)
-                @klass.where "#{foreign_key_column refl} <> ? OR #{name}_type <> ?", record, record.class.name
+                klass.where "#{foreign_key_column refl} <> ? OR #{name}_type <> ?", record, record.class.name
               end
             else
               def_scope do |record|
                 record = find_if_named(refl, record)
-                @klass.where "#{foreign_key_column refl} <> ?", record
+                klass.where "#{foreign_key_column refl} <> ?", record
               end
             end
 
@@ -137,117 +140,129 @@ module Hobo
           when name =~ /^(.*)_is$/ && (col = column($1))
             return true if check_only
 
+            scope_where = "#{column_sql(col)} = ?"
             def_scope do |str|
-              @klass.where "#{column_sql(col)} = ?", str
+              klass.where scope_where, str
             end
 
           # name_is_not(str)
           when name =~ /^(.*)_is_not$/ && (col = column($1))
             return true if check_only
 
+            scope_where = "#{column_sql(col)} <> ?"
             def_scope do |str|
-              @klass.where "#{column_sql(col)} <> ?", str
+              klass.where scope_where, str
             end
 
           # name_contains(str)
           when name =~ /^(.*)_contains$/ && (col = column($1))
             return true if check_only
 
+            scope_where = "#{column_sql(col)} #{like_operator} ?"
             def_scope do |str|
-              @klass.where "#{column_sql(col)} #{like_operator} ?", "%#{str}%"
+              klass.where scope_where, "%#{str}%"
             end
 
           # name_does_not_contain
           when name =~ /^(.*)_does_not_contain$/ && (col = column($1))
             return true if check_only
 
+            scope_where = "#{column_sql(col)} NOT #{like_operator} ?"
             def_scope do |str|
-              @klass.where "#{column_sql(col)} NOT #{like_operator} ?", "%#{str}%"
+              klass.where scope_where, "%#{str}%"
             end
 
           # name_starts(str)
           when name =~ /^(.*)_starts$/ && (col = column($1))
             return true if check_only
 
+            scope_where = "#{column_sql(col)} #{like_operator} ?"
             def_scope do |str|
-              @klass.where "#{column_sql(col)} #{like_operator} ?", "#{str}%"
+              klass.where scope_where, "#{str}%"
             end
 
           # name_does_not_start
           when name =~ /^(.*)_does_not_start$/ && (col = column($1))
             return true if check_only
 
+            scope_where = "#{column_sql(col)} NOT #{like_operator} ?"
             def_scope do |str|
-              @klass.where "#{column_sql(col)} NOT #{like_operator} ?", "#{str}%"
+              klass.where scope_where, "#{str}%"
             end
 
           # name_ends(str)
           when name =~ /^(.*)_ends$/ && (col = column($1))
             return true if check_only
 
+            scope_where = "#{column_sql(col)} #{like_operator} ?"
             def_scope do |str|
-              @klass.where "#{column_sql(col)} #{like_operator} ?", "%#{str}"
+              klass.where scope_where, "%#{str}"
             end
 
           # name_does_not_end(str)
           when name =~ /^(.*)_does_not_end$/ && (col = column($1))
             return true if check_only
 
+            scope_where = "#{column_sql(col)} NOT #{like_operator} ?"
             def_scope do |str|
-              @klass.where "#{column_sql(col)} NOT #{like_operator} ?", "%#{str}"
+              klass.where scope_where, "%#{str}"
             end
 
           # published (a boolean column)
           when (col = column(name)) && (col.type == :boolean)
             return true if check_only
 
+            scope_where = "#{column_sql(col)} = ?"
             def_scope do
-              @klass.where "#{column_sql(col)} = ?", true
+              klass.where scope_where, true
             end
 
           # not_published
           when name =~ /^not_(.*)$/ && (col = column($1)) && (col.type == :boolean)
             return true if check_only
-
+            scope_where = "#{column_sql(col)} <> ?"
             def_scope do
-              @klass.where "#{column_sql(col)} <> ?", true
+              klass.where scope_where, true
             end
 
           # published_before(time)
           when name =~ /^(.*)_before$/ && (col = column("#{$1}_at") || column("#{$1}_date") || column("#{$1}_on")) && col.type.in?([:date, :datetime, :time, :timestamp])
             return true if check_only
 
+            scope_where = "#{column_sql(col)} < ?"
             def_scope do |time|
-              @klass.where "#{column_sql(col)} < ?", time
+              klass.where scope_where, time
             end
 
           # published_after(time)
           when name =~ /^(.*)_after$/ && (col = column("#{$1}_at") || column("#{$1}_date") || column("#{$1}_on")) && col.type.in?([:date, :datetime, :time, :timestamp])
             return true if check_only
 
+            scope_where = "#{column_sql(col)} > ?"
             def_scope do |time|
-              @klass.where "#{column_sql(col)} > ?", time
+              klass.where scope_where, time
             end
 
           # published_between(time1, time2)
           when name =~ /^(.*)_between$/ && (col = column("#{$1}_at") || column("#{$1}_date") || column("#{$1}_on")) && col.type.in?([:date, :datetime, :time, :timestamp])
             return true if check_only
 
+            scope_where = "#{column_sql(col)} >= ? AND #{column_sql(col)} <= ?"
             def_scope do |time1, time2|
-              @klass.where "#{column_sql(col)} >= ? AND #{column_sql(col)} <= ?", time1, time2
+              klass.where scope_where, time1, time2
             end
 
            # active (a lifecycle state)
-          when @klass.has_lifecycle? && name.to_sym.in?(@klass::Lifecycle.state_names)
+          when klass.has_lifecycle? && name.to_sym.in?(klass::Lifecycle.state_names)
             return true if check_only
 
-            if @klass::Lifecycle.state_names.length == 1
+            if klass::Lifecycle.state_names.length == 1
               # nothing to check for - create a dummy scope
-              def_scope { @klass.scoped }
+              def_scope { klass.scoped }
               true
             else
               def_scope do
-                @klass.where "#{@klass.table_name}.#{@klass::Lifecycle.state_field} = ?", name
+                klass.where "#{klass.table_name}.#{klass::Lifecycle.state_field} = ?", name
               end
             end
 
@@ -256,14 +271,14 @@ module Hobo
             return true if check_only
 
             def_scope do |record|
-              @klass.where "#{@klass.table_name}.#{@klass.primary_key} = ?", record
+              klass.where "#{klass.table_name}.#{klass.primary_key} = ?", record
             end
 
           when name == "is_not"
             return true if check_only
 
             def_scope do |record|
-              @klass.where "#{@klass.table_name}.#{@klass.primary_key} <> ?", record
+              klass.where "#{klass.table_name}.#{klass.primary_key} <> ?", record
             end
 
 
@@ -271,16 +286,16 @@ module Hobo
             return true if check_only
 
             def_scope do
-              @klass.order "#{@klass.table_name}.created_at DESC"
+              klass.order "#{klass.table_name}.created_at DESC"
             end
 
           when name == "recent"
             return true if check_only
 
-            if "created_at".in?(@klass.columns.*.name)
+            if "created_at".in?(klass.columns.*.name)
               def_scope do |*args|
                 count = args.first || 6
-                @klass.order("#{@klass.table_name}.created_at DESC").limit(count)
+                klass.order("#{klass.table_name}.created_at DESC").limit(count)
               end
             else
               def_scope do |*args|
@@ -292,7 +307,6 @@ module Hobo
           when name == "order_by"
             return true if check_only
 
-            klass = @klass
             def_scope do |*args|
               field, asc = args
               field ||= ""
@@ -305,7 +319,7 @@ module Hobo
               else
                 colspec = "#{klass.table_name}.#{field}"
               end
-              @klass.includes(include).order("#{colspec} #{asc._?.upcase}")
+              klass.includes(include).order("#{colspec} #{asc._?.upcase}")
             end
 
           when name == "include"
@@ -315,7 +329,7 @@ module Hobo
             return true if check_only
 
             def_scope do |inclusions|
-              @klass.includes(inclusions)
+              klass.includes(inclusions)
             end
 
           when name == "search"
@@ -329,9 +343,9 @@ module Hobo
               word_queries = words.map do |word|
                 field_query = '(' + fields.map { |field|
                   if using_postgresql
-                    casted_field = "CAST(#{@klass.table_name}.#{field} AS TEXT)"
+                    casted_field = "CAST(#{klass.table_name}.#{field} AS TEXT)"
                   else
-                    casted_field = "#{@klass.table_name}.#{field}"
+                    casted_field = "#{klass.table_name}.#{field}"
                   end
                   field = "#{casted_field}" unless field =~ /\./
                   "(#{field} #{match_keyword} ?)"
@@ -340,7 +354,7 @@ module Hobo
                 field_query
               end
 
-              @klass.where *([word_queries.join(" AND ")] + args)
+              klass.where *([word_queries.join(" AND ")] + args)
             end
 
           else
