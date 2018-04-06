@@ -2,7 +2,7 @@ class DevController < ActionController::Base
 
   hobo_controller
 
-  before_filter :developer_modes_only
+  before_action :developer_modes_only
 
   def set_current_user
     model = params[:model] || Hobo::Model::UserBase.default_user_model

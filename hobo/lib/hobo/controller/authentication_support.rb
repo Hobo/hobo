@@ -27,15 +27,15 @@ module Hobo
       #
       # To require logins for all actions, use this in your controllers:
       #
-      #   before_filter :login_required
+      #   before_action :login_required
       #
       # To require logins for specific actions, use this in your controllers:
       #
-      #   before_filter :login_required, :only => [ :edit, :update ]
+      #   before_action :login_required, :only => [ :edit, :update ]
       #
       # To skip this in a subclassed controller:
       #
-      #   skip_before_filter :login_required
+      #   skip_before_action :login_required
       #
       def login_required(user_model=nil)
         auth_model = user_model || Hobo::Model::UserBase.default_user_model
@@ -65,7 +65,7 @@ module Hobo
         session[:return_to] = nil
       end
 
-      # When called with before_filter :login_from_cookie will check for an :auth_token
+      # When called with before_action :login_from_cookie will check for an :auth_token
       # cookie and log the user back in if apropriate
       def login_from_cookie
         if (user = authenticated_user_from_cookie)

@@ -94,11 +94,11 @@ module Hobo
         say_title 'Invite Only Option'
         return unless (@invite_only = yes_no?("Do you want to add the features for an invite only website?"))
         private_site = yes_no?("Do you want to prevent all access to the site to non-members?\n(Choose 'y' only if ALL your site will be private, choose 'n' if at least one controller will be public)")
-        say( %( If you wish to prevent all access to some controller to non-members, add 'before_filter :login_required'
+        say( %( If you wish to prevent all access to some controller to non-members, add 'before_action :login_required'
 to the relevant controllers:
 
     include Hobo::Controller::AuthenticationSupport
-    before_filter :login_required
+    before_action :login_required
 
 (note that the include statement is not required for hobo_controllers)
 
@@ -110,7 +110,7 @@ NOTE: You might want to sign up as the administrator before adding this!
       end
       inject_into_file 'app/controllers/application_controller.rb', <<EOI, :after => "protect_from_forgery with: :exception\n" if private_site
   include Hobo::Controller::AuthenticationSupport
-  before_filter :except => [:login, :forgot_password, :accept_invitation, :do_accept_invitation, :reset_password,
+  before_action :except => [:login, :forgot_password, :accept_invitation, :do_accept_invitation, :reset_password,
 :do_reset_password] do
      login_required unless #{@user_resource_name.camelize}.count == 0
   end

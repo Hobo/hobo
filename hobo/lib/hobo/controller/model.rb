@@ -25,7 +25,7 @@ module Hobo
 
 
           helper_method :model, :current_user
-          before_filter :set_no_cache_headers
+          before_action :set_no_cache_headers
 
           rescue_from ActiveRecord::RecordNotFound, :with => :not_found unless Rails.env.development?
 

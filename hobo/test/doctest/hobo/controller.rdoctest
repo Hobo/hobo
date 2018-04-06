@@ -32,15 +32,15 @@ This is used as a filter to control authentication.
 
 To require logins for all actions, use this in your controllers:
 
-    before_filter :login_required
+    before_action :login_required
 
 To require logins for specific actions, use this in your controllers:
 
-    before_filter :login_required, :only => [ :edit, :update ]
+    before_action :login_required, :only => [ :edit, :update ]
 
 To skip this in a subclassed controller:
 
-    skip_before_filter :login_required
+    skip_before_action :login_required
 
 
 
@@ -59,7 +59,7 @@ Redirect to the URI stored by the most recent store_location call or to the pass
 
 ## login_from_cookie and authenticated_user_from_cookie
 
-When called with before_filter, `login_from_cookie` will call `authenticated_user_from_cookie` to check for
+When called with before_action, `login_from_cookie` will call `authenticated_user_from_cookie` to check for
 an `auth_token` cookie, and if the result is appropiate, it will log the user in.
 
 See the [controller section in Users and Authentication](/manual/users_and_authentication#hobo_user_controller) for more information

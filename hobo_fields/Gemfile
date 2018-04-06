@@ -3,8 +3,8 @@ source "http://rubygems.org"
 gem 'rubydoctest', :git => 'git://github.com/tslocke/rubydoctest.git'
 gem 'rails'
 gem 'yard'
-gem 'protected_attributes'
-gem 'responders', '~> 2.0'
+gem 'protected_attributes_continued'
+gem 'responders', '~> 2.4'
 
 gemspec :path => "../hobo_support"
 gemspec

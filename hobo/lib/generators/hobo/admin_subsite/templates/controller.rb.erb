@@ -2,7 +2,7 @@ class <%= subsite_name %>::<%= subsite_name %>SiteController < ApplicationContro
 
   hobo_controller
 
-  before_filter :admin_required
+  before_action :admin_required
 
   private
 

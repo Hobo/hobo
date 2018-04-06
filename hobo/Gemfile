@@ -1,9 +1,9 @@
 source "http://rubygems.org"
 
 gem 'rubydoctest', :git => 'git://github.com/tslocke/rubydoctest.git'
-gem 'rails', '4.2.10'
-gem 'responders', '2.1.0'
-gem 'protected_attributes'
+gem 'rails'
+gem 'responders', '~> 2.4'
+gem 'protected_attributes_continued'
 gemspec :path => "../dryml"
 gemspec :path => "../hobo_support"
 gemspec :path => "../hobo_fields"
