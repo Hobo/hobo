@@ -14,6 +14,9 @@
 
         >> Dryml.render("hi")
         => "hi"
+        
+        >> Dryml.render("<%= 1+1 %>", {:this => "hello"})
+        => "2"
 
         >> Dryml.render("<%= this %>", {:this => "hello"})
         => "hello"

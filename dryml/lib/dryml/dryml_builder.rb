@@ -60,88 +60,68 @@ module Dryml
     end
 
 
-      begin
-        require "erubis"
-      rescue LoadError
-        # nothing
-      else
-        erubis = Class.new(::Erubis::Eruby) do
-          # :nodoc: all
-          def add_preamble(src)
-            @newline_pending = 0
-            src << "@output_buffer = output_buffer || ActionView::OutputBuffer.new;"
-          end
 
-          def add_text(src, text)
-            return if text.empty?
+    class Erubis < ::Erubi::Engine
+      def initialize(input, properties = {})
+        @newline_pending = 0
+        super
+      end
+      
+      def add_preamble(src)
 
-            if text == "\n"
-              @newline_pending += 1
-            else
-              src << "@output_buffer.safe_append='"
-              src << "\n" * @newline_pending if @newline_pending > 0
-              src << escape_text(text)
-              src << "'.freeze;"
+      end
 
-              @newline_pending = 0
-            end
-          end
+      def add_text(text)
+        return if text.empty?
 
-          # Erubis toggles <%= and <%== behavior when escaping is enabled.
-          # We override to always treat <%== as escaped.
-          def add_expr(src, code, indicator)
-            case indicator
-            when "=="
-              add_expr_escaped(src, code)
-            else
-              super
-            end
-          end
+        if text == "\n"
+          @newline_pending += 1
+        else
+          src << "self.output_buffer.safe_append='"
+          src << "\n" * @newline_pending if @newline_pending > 0
+          src << text.gsub(/['\\]/, '\\\\\&')
+          src << "'.freeze;"
 
-          BLOCK_EXPR = /\s*((\s+|\))do|\{)(\s*\|[^|]*\|)?\s*\Z/
-
-          def add_expr_literal(src, code)
-            flush_newline_if_pending(src)
-            if BLOCK_EXPR.match?(code)
-              src << "@output_buffer.append= " << code
-            else
-              src << "@output_buffer.append=(" << code << ");"
-            end
-          end
-
-          def add_expr_escaped(src, code)
-            flush_newline_if_pending(src)
-            if BLOCK_EXPR.match?(code)
-              src << "@output_buffer.safe_expr_append= " << code
-            else
-              src << "@output_buffer.safe_expr_append=(" << code << ");"
-            end
-          end
-
-          def add_stmt(src, code)
-            flush_newline_if_pending(src)
-            super
-          end
-
-          def add_postamble(src)
-            flush_newline_if_pending(src)
-            src << "@output_buffer.to_s"
-          end
-
-          def flush_newline_if_pending(src)
-            if @newline_pending > 0
-              src << "@output_buffer.safe_append='#{"\n" * @newline_pending}'.freeze;"
-              @newline_pending = 0
-            end
-          end
+          @newline_pending = 0
         end
+      end
+
+      BLOCK_EXPR = /\s+(do|\{)(\s*\|[^|]*\|)?\s*\Z/
+
+
+      def add_expression(indicator, code)
+        if code =~ BLOCK_EXPR
+          src << 'self.output_buffer.append= ' << code << ";\nself.output_buffer;"
+        else
+          src << 'self.output_buffer.append= (' << code << ");\nself.output_buffer;"
+        end
+      end
+
+      def add_stmt(src, code)
+        # skip fallback code - it utterly destroys DRYML-generated ERB
+        super
+      end
+
+      def add_expr_escaped(src, code)
+        if code =~ BLOCK_EXPR
+          src << "self.output_buffer.safe_append= " << code << ";\nself.output_buffer;"
+        else
+          src << "self.output_buffer.safe_concat((" << code << ").to_s);"
+        end
+      end
+
+      def add_postamble(src)
+        # NOTE: we can't just add a 'self.output_buffer' here because this parser
+        # is used to compile taglibs which don't HAVE one
+      end
     end
 
     def erb_process(erb_src)
+      
       trim_mode = ActionView::Template::Handlers::ERB.erb_trim_mode
-      erb = ::Erubi::Engine.new(erb_src, :trim_mode => trim_mode)
+      erb = Erubis.new(erb_src, :trim_mode => trim_mode)
       res = erb.src
-      res = res.dup
+      res = res.dup.to_s
       if res.respond_to? :force_encoding
         res.force_encoding(erb_src.encoding)
       end
@@ -154,6 +134,7 @@ module Dryml
 
       @build_instructions._?.each do |instruction|
         name = instruction[:name]
+
         case instruction[:type]
         when :eval
           @environment.class_eval(instruction[:src], template_path, instruction[:line_num])

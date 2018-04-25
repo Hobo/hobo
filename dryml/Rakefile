@@ -11,7 +11,7 @@ namespace "test" do
   desc "Run the doctests"
   task :doctest do |t|
     files=Dir['test/**/*.rdoctest'].map {|f| File.expand_path(f)}.join(' ')
-    exit(1) if !system("#{RUBYDOCTEST} #{files}")
+    exit(1) if !system("#{RUBYDOCTEST} --trace #{files}")
   end
 end
 
