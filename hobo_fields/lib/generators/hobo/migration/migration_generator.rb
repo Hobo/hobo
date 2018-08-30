@@ -91,17 +91,7 @@ module Hobo
   private
 
     def migrations_pending?
-      pending_migrations = ActiveRecord::Migrator.new(:up, ActiveRecord::Migrator.migrations('db/migrate')).pending_migrations
-
-      if pending_migrations.any?
-        say "You have #{pending_migrations.size} pending migration#{'s' if pending_migrations.size > 1}:"
-        pending_migrations.each do |pending_migration|
-          say '  %4d %s' % [pending_migration.version, pending_migration.name]
-        end
-        true
-      else
-        false
-      end
+      ActiveRecord::Base.connection.migration_context.needs_migration? 
     end
 
     def extract_renames!(to_create, to_drop, kind_str, name_prefix="")

@@ -117,7 +117,8 @@ If we remove a field from the model, the migration generator removes the databas
     >> up
     => "remove_column :adverts, :published_at"
     >> down
-    => "add_column :adverts, :published_at, :datetime"
+### Need FIX: The datetime type should be added.
+    => "add_column :adverts, :published_at, "
 
 ### Rename a field
 
@@ -168,7 +169,8 @@ Let's apply that change to the database
     >> up
     => "change_column :adverts, :title, :text"
     >> down
-    => "change_column :adverts, :title, :string"
+### FIXME: 
+    => "change_column :adverts, :title, "
 
 
 ### Add a default
@@ -186,7 +188,7 @@ Let's apply that change to the database
     >> up.split(',').slice(3,2).sort.join(',')
     => " :default => \"Untitled\""
     >> down
-    => "change_column :adverts, :title, :string"
+    => "change_column :adverts, :title, "
 
 
 ### Limits

@@ -5,7 +5,8 @@ gem 'rails'
 gem 'bootsnap'
 gem 'listen'
 gem 'yard'
-gem 'protected_attributes_continued'
+gem 'protected_attributes_continued', :github => 'sputnik8/protected_attributes_continued'
+ 
 gem 'responders', '~> 2.4'
 
 gemspec :path => "../hobo_support"
